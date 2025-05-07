@@ -1,0 +1,41 @@
+# Example of a configuration file with insecure cryptographic settings
+# DO NOT use these settings in production!
+
+# Database configuration
+database:
+  host: localhost
+  port: 5432
+  username: dbuser
+  # Plaintext password (insecure)
+  password: P@ssw0rd123!
+  
+# Encryption settings
+encryption:
+  # Insecure algorithm (use AES-256-GCM instead)
+  algorithm: DES
+  # Static initialization vector (IV) - should be random per encryption
+  iv: "0123456789abcdef"
+  # Weak key - too short
+  key: "insecure_key"
+  # Insecure mode of operation
+  mode: ECB
+  
+# Authentication settings
+auth:
+  # Insecure hash algorithm (use bcrypt, Argon2, scrypt)
+  password_hash: MD5
+  # Too few iterations for key derivation
+  pbkdf_iterations: 100
+  # JWT settings with weak signature algorithm
+  jwt:
+    algorithm: HS256  # Consider stronger algorithms like RS256
+    secret: "jwt_secret_that_is_not_long_enough_for_production"
+    
+# SSL/TLS Configuration
+ssl:
+  # Insecure protocol version
+  protocol: TLSv1.0
+  # Weak ciphers allowed
+  allow_weak_ciphers: true
+  # Example of a weak cipher suite
+  cipher_suite: "TLS_RSA_WITH_DES_CBC_SHA"

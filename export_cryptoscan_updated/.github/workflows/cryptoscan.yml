@@ -1,0 +1,98 @@
+name: CryptoScan Security Check
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  scan:
+    name: Scan for Cryptographic Vulnerabilities
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+          
+      - name: Install CryptoScan
+        run: |
+          git clone https://github.com/yourusername/cryptoscan.git
+          cd cryptoscan
+          go build -o cryptoscan
+          sudo mv cryptoscan /usr/local/bin/
+      
+      - name: Run CryptoScan
+        run: |
+          cryptoscan scan . --output json > cryptoscan-results.json
+        
+      - name: Generate summary
+        run: |
+          echo "## CryptoScan Security Results" >> $GITHUB_STEP_SUMMARY
+          CRITICAL=$(jq '.summary.critical' cryptoscan-results.json)
+          HIGH=$(jq '.summary.high' cryptoscan-results.json)
+          MEDIUM=$(jq '.summary.medium' cryptoscan-results.json)
+          LOW=$(jq '.summary.low' cryptoscan-results.json)
+          TOTAL=$(jq '.summary.total' cryptoscan-results.json)
+          
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+          echo "- Low: $LOW" >> $GITHUB_STEP_SUMMARY
+          echo "- Total: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "### ⚠️ Critical or High severity findings detected!" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the detailed report in the artifacts." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ No critical or high severity findings!" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: cryptoscan-results
+          path: cryptoscan-results.json
+          
+      - name: Check for critical findings
+        run: |
+          CRITICAL=$(jq '.summary.critical' cryptoscan-results.json)
+          HIGH=$(jq '.summary.high' cryptoscan-results.json)
+          
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "::error::$CRITICAL critical security findings detected!"
+            exit 1
+          elif [ "$HIGH" -gt 0 ]; then
+            echo "::warning::$HIGH high severity security findings detected!"
+          fi
+
+  notify:
+    name: Notify on Findings
+    needs: scan
+    if: failure()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: security-alerts
+          SLACK_COLOR: danger
+          SLACK_ICON: https://github.com/yourusername/cryptoscan/raw/main/logo.png
+          SLACK_TITLE: Security Alert - Cryptographic Vulnerabilities Detected
+          SLACK_MESSAGE: Critical cryptographic vulnerabilities were found in the repository. Please check the GitHub Actions workflow for details.
+          SLACK_FOOTER: Powered by CryptoScan
